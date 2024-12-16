@@ -68,7 +68,8 @@ jobs:
               # Make the GET request and capture the HTTP status code
               response=$(curl -s -w "%{http_code}" -o temp_response.json "$ENDPOINT/main/compliance/api/v3/quick/scan/$job_id?with_incidents=true" \
                 -H "Authorization: Bearer $API_KEY")
-
+              echo "$response" > debug_response.json
+              cat debug_response.json
               # Extract the HTTP status code
               http_status="${response: -3}"
               body=$(cat temp_response.json)
