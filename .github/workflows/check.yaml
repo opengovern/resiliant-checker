@@ -71,7 +71,8 @@ jobs:
                 -H "Authorization: Bearer $API_KEY")
 
               # Check if the job has completed
-              cat $result
+             echo "$result" > debug_response.json
+              cat debug_response.json
               job_status=$(echo "$result" | jq -r '.job_summary.auditable')
               if [ "$job_status" = "true" ]; then
                 echo "Job ID $job_id completed successfully."
