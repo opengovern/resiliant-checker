@@ -60,33 +60,37 @@ jobs:
           while read -r job_id; do
             echo "Processing Job ID: $job_id"
             retry_count=0
-            job_status="pending"
 
             # Poll for job completion
             while [ $retry_count -lt $max_retries ]; do
               echo "Polling job status for Job ID: $job_id (Attempt: $((retry_count+1)))"
 
-              # Make the GET request to fetch job status
-              result=$(curl -s "$ENDPOINT/main/compliance/api/v3/quick/scan/$job_id?with_incidents=true" \
+              # Make the GET request and capture the HTTP status code
+              response=$(curl -s -w "%{http_code}" -o temp_response.json "$ENDPOINT/main/compliance/api/v3/quick/scan/$job_id?with_incidents=true" \
                 -H "Authorization: Bearer $API_KEY")
 
-              # Check if the job has completed
-             echo "$result" > debug_response.json
-              cat debug_response.json
-              job_status=$(echo "$result" | jq -r '.job_summary.auditable')
-              if [ "$job_status" = "true" ]; then
-                echo "Job ID $job_id completed successfully."
-                echo "$result" > "result_$job_id.json"  # Save each job's result for further processing
+              # Extract the HTTP status code
+              http_status="${response: -3}"
+              body=$(cat temp_response.json)
+
+              if [ "$http_status" = "200" ]; then
+                echo "Job ID $job_id completed successfully. Saving result."
+                echo "$body" > "result_$job_id.json"
                 break
+              elif [ "$http_status" = "400" ]; then
+                echo "Job ID $job_id failed with status 400."
+                passed=false
+                break
+              else
+                echo "Job ID $job_id is still in progress. Retrying in 30 seconds..."
               fi
 
-              echo "Job ID $job_id is still running. Retrying in 30 seconds..."
               retry_count=$((retry_count+1))
               sleep 30
             done
 
             # If the job didn't complete within the timeout
-            if [ "$job_status" != "true" ]; then
+            if [ "$http_status" != "200" ]; then
               echo "Job ID $job_id did not complete within the timeout period (5 minutes)."
               passed=false
             fi
@@ -115,4 +119,27 @@ jobs:
 
             if [ -z "$critical_alarms" ]; then
               echo "No critical controls found in $result_file."
-            elif [ "$critical_alarms" -
+            elif [ "$critical_alarms" -eq 0 ]; then
+              echo "All critical controls passed without alarms in $result_file."
+            else
+              echo "Critical alarms found in $result_file: $critical_alarms"
+              passed=false
+            fi
+          done
+
+          # Set the outcome of the step based on the passed variable
+          if [ "$passed" = "false" ]; then
+            echo "Critical alarms found. Marking as failed."
+            exit 1
+          else
+            echo "All critical controls passed successfully."
+          fi
+
+      # Final Step: Output Result
+      - name: Success Message
+        if: success()
+        run: echo "Compliance checks passed for all jobs!"
+
+      - name: Failure Message
+        if: failure()
+        run: echo "Compliance checks failed. Critical alarms were found!"
