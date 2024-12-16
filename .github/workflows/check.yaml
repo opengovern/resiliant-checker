@@ -1,0 +1,86 @@
+name: Compliance Benchmark Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      benchmark_id:
+        description: "The Benchmark ID"
+        required: true
+      integration_ids:
+        description: "List of Integration IDs (comma-separated)"
+        required: true
+
+jobs:
+  compliance-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: First API Call - Schedule Compliance Run
+        id: schedule_compliance_run
+        env:
+          ENDPOINT: ${{ secrets.ENDPOINT }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          # Prepare the JSON payload
+          integration_ids=$(echo "${{ github.event.inputs.integration_ids }}" | tr ',' '\n' | jq -R -s '[split("\n") | .[] | select(length > 0) | {"integration_id": .}]')
+          payload=$(jq -n \
+            --argjson integrations "$integration_ids" \
+            '{"with_incidents": false, "integration_info": $integrations}')
+          
+          # Make the POST request
+          response=$(curl -s -X POST "$ENDPOINT/main/schedule/api/v3/compliance/benchmark/${{ github.event.inputs.benchmark_id }}/run" \
+            -H "Authorization: Bearer $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload")
+
+          # Parse job_ids from the response
+          echo "$response" | jq -r '.[].job_id' > job_ids.txt
+          echo "Job IDs: $(cat job_ids.txt)"
+
+      - name: Iterate through Job IDs and Fetch Results
+        id: fetch_results
+        env:
+          ENDPOINT: ${{ secrets.ENDPOINT }}
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          passed=true
+          while read -r job_id; do
+            echo "Processing Job ID: $job_id"
+
+            # Call the API to get job results
+            result=$(curl -s "$ENDPOINT/main/compliance/api/v3/quick/scan/$job_id?with_incidents=true" \
+              -H "Authorization: Bearer $API_KEY")
+
+            # Check for critical controls with alarms
+            critical_alarms=$(echo "$result" | jq '.controls | to_entries[] | select(.value.severity == "critical") | .value.control_summary.alarm')
+
+            if [ "$critical_alarms" != "0" ]; then
+              echo "Job ID: $job_id has critical alarms: $critical_alarms"
+              passed=false
+            else
+              echo "Job ID: $job_id passed."
+            fi
+          done < job_ids.txt
+
+          # Set the outcome of the job
+          if [ "$passed" = "false" ]; then
+            echo "Critical controls with alarms found. Marking as failed."
+            exit 1
+          else
+            echo "All checks passed."
+          fi
+
+      - name: Output Results
+        if: success()
+        run: echo "Compliance checks passed for all jobs!"
+
+      - name: Failure Message
+        if: failure()
+        run: echo "Compliance checks failed. Critical alarms were found!"
