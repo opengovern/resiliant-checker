@@ -41,6 +41,8 @@ jobs:
             -d "$payload")
 
           # Parse job_ids from the response
+          echo "$response" > debug_response.json
+          cat debug_response.json
           echo "$response" | jq -r '.[].job_id' > job_ids.txt
           echo "Job IDs: $(cat job_ids.txt)"
 
