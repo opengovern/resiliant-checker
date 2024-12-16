@@ -34,7 +34,7 @@ jobs:
           integration_ids=$(echo "${{ github.event.inputs.integration_ids }}" | tr ',' '\n' | jq -R -s '[split("\n") | .[] | select(length > 0) | {"integration_id": .}]')
           payload=$(jq -n \
             --argjson integrations "$integration_ids" \
-            '{"with_incidents": false, "integration_info": $integrations}')
+            '{"with_incidents": true, "integration_info": $integrations}')
           
           # Make the POST request
           response=$(curl -s -X POST "$ENDPOINT/main/schedule/api/v3/compliance/benchmark/${{ github.event.inputs.benchmark_id }}/run" \
@@ -77,13 +77,9 @@ jobs:
                 echo "Job ID $job_id completed successfully. Saving result."
                 echo "$body" > "result_$job_id.json"
                 break
-              elif [ "$http_status" = "400" ]; then
-                echo "Job ID $job_id failed with status 400."
-                passed=false
-                break
-              else
-                echo "Job ID $job_id is still in progress. Retrying in 30 seconds..."
               fi
+
+              echo "Job ID $job_id is still running. Retrying in 30 seconds..."
 
               retry_count=$((retry_count+1))
               sleep 30
