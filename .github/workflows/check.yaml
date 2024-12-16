@@ -54,7 +54,7 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
         run: |
           passed=true
-          max_retries=10  # Retry for up to 5 minutes (10 retries with 45-second intervals)
+          max_retries=10  # Retry for up to 10 minutes (10 retries with 60-second intervals)
 
           # Iterate through each Job ID
           while read -r job_id; do
@@ -83,7 +83,7 @@ jobs:
               echo "Job ID $job_id is still running. Retrying in 30 seconds..."
 
               retry_count=$((retry_count+1))
-              sleep 45  # Wait for 45 seconds before retrying
+              sleep 60  # Wait for 60 seconds before retrying
             done
 
             # If the job didn't complete within the timeout
