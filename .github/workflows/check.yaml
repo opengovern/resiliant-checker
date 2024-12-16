@@ -80,7 +80,7 @@ jobs:
                 break
               fi
 
-              echo "Job ID $job_id is still running. Retrying in 30 seconds..."
+              echo "Job ID $job_id is still running. Retrying in 60 seconds..."
 
               retry_count=$((retry_count+1))
               sleep 60  # Wait for 60 seconds before retrying
@@ -88,7 +88,7 @@ jobs:
 
             # If the job didn't complete within the timeout
             if [ "$http_status" != "200" ]; then
-              echo "Job ID $job_id did not complete within the timeout period (5 minutes)."
+              echo "Job ID $job_id did not complete within the timeout period (10 minutes)."
               passed=false
             fi
           done < job_ids.txt
